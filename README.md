@@ -39,8 +39,6 @@ $ ./test
 (?:something)
 ```
 
-The project uses `cmake` as the builing system. It's especially useful for development in Visual Studio in Windows.
-
 ## License
 
 MIT.
@@ -54,7 +52,7 @@ MIT.
 
 First of all, it's designed to be a header-only library. Thus everything are written in the header files (`.hpp`). Ideally users only need to `#include <spre/spre.hpp>`.
 
-The library is written as a light-weight compiler-like thing, although SRL is a DSL and does not have control flow (as a subset of Regex) thus could not be considered turing-complete. As a result, this library has lexer and parser and code generator. This library has specific lexer instead of using `yacc`. The code is written following the tutorials from [llvm](http://llvm.org/docs/tutorial/LangImpl02.html) and [@](http://frozengene.github.io/blog/compiler/2014/08/10/compiler_tutorial_03/).
+The library is written as a light-weight compiler-like thing, although SRL is a DSL and does not have control flow (as a subset of Regex) thus could not be considered turing-complete. As a result, this library has lexer and parser and code generator. This library has specific lexer instead of using `yacc`. The code is written following the tutorials from [llvm](http://llvm.org/docs/tutorial/LangImpl02.html) and [@frozengene](http://frozengene.github.io/blog/compiler/2014/08/10/compiler_tutorial_03/).
 
 The structure:
 
