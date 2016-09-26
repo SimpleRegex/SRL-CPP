@@ -3,6 +3,7 @@
 
 #include "spre/dictionary.hpp"
 #include "spre/token.hpp"
+//#include <iostream>
 #include <cctype>
 #include <string>
 
@@ -17,6 +18,7 @@ class Lexer
     ~Lexer();
     Token get_token() const;
     Token get_next_token();
+    bool has_error() const;
     bool has_ended() const;
 
     enum class State
@@ -25,7 +27,8 @@ class Lexer
         END_OF_FILE,
         IDENTIFIER,
         NUMBER,
-        STRING
+        STRING,
+        ERROR
     };
 
   private:
@@ -37,10 +40,12 @@ class Lexer
     State state_;
     Token token_;
     Dictionary dictionary_;
+	bool error_flag_;
+	string error_msg_;
 
     void move_to_next_char();
-    char peek_prev_char() const;
-    char peek_next_char() const;
+    char peek_prev_char(size_t k = 1) const;
+    char peek_next_char(size_t k = 1) const;
     void handle_eof_state();
     void handle_identifier_state();
     void handle_number_state();
@@ -49,8 +54,8 @@ class Lexer
 
 Lexer::Lexer(const string &src) : src_(src), src_len_(src.length()),
                                   src_cursor_(0), curr_char_(' '),
-                                  token_(Token()),
-                                  state_(State::NONE)
+                                  token_(Token()), state_(State::NONE), 
+                                  error_flag_(false)
 {
 }
 
@@ -63,6 +68,11 @@ inline Token Lexer::get_token() const
     return token_;
 }
 
+inline bool Lexer::has_error() const
+{
+    return state_ == State::ERROR;
+}
+
 inline bool Lexer::has_ended() const
 {
     // here is a concept issue, how to define ended?
@@ -73,7 +83,7 @@ inline bool Lexer::has_ended() const
     // "some string"
     //             ^^
     //   curr_char_  src_cursor    <- or is it ended?
-    return src_cursor_ >= src_len_;
+    return state_ == State::END_OF_FILE;
 }
 
 inline void Lexer::move_to_next_char()
@@ -82,22 +92,22 @@ inline void Lexer::move_to_next_char()
     src_cursor_ += 1; // the position next to that of curr_char_
 }
 
-inline char Lexer::peek_prev_char() const
+inline char Lexer::peek_prev_char(size_t k) const
 {
     // we pretend there are spaces before the beginning of the source code
-    return src_cursor_ >= 2 ? src_[src_cursor_ - 2] : ' ';
+    return src_cursor_ + 1 - k >= 2 ? src_[src_cursor_ - 2 + 1 - k] : ' ';
 }
 
-inline char Lexer::peek_next_char() const
+inline char Lexer::peek_next_char(size_t k) const
 {
+    // k = 1 by default
     // maybe special eof?
     // now '\0' is used
-    return src_cursor_ < src_len_ ? src_[src_cursor_] : '\0';
+    return src_cursor_ - 1 + k < src_len_ ? src_[src_cursor_ - 1 + k] : '\0';
 }
 
 inline Token Lexer::get_next_token()
 {
-
     bool is_matched = false;
     char string_state_delimiter = '\"';
 
@@ -111,7 +121,13 @@ inline Token Lexer::get_next_token()
         switch (state_)
         {
         case State::NONE:
-            move_to_next_char();
+            if (curr_char_ != '\0') {
+                move_to_next_char();
+            }
+            else
+            {
+                handle_eof_state();
+            }
             break;
         case State::END_OF_FILE:
             handle_eof_state();
@@ -125,17 +141,16 @@ inline Token Lexer::get_next_token()
         case State::STRING:
             handle_string_state(string_state_delimiter);
             break;
+        case State::ERROR:
+            // do nothing and end
+            break;
         default:
             break;
         }
 
         if (state_ == State::NONE)
         {
-            if (curr_char_ == '\0')
-            {
-                state_ = State::END_OF_FILE;
-            }
-            else if (std::isalpha(curr_char_) || curr_char_ == '(' || curr_char_ == ')')
+            if (std::isalpha(curr_char_) || curr_char_ == '(' || curr_char_ == ')')
             {
                 state_ = State::IDENTIFIER;
             }
@@ -148,9 +163,21 @@ inline Token Lexer::get_next_token()
                 state_ = State::STRING;
                 string_state_delimiter = curr_char_;
             }
+            else if (curr_char_ == '\0')
+            {
+                state_ = State::NONE; // delay to next calling get_next_token()
+            }
             else if (std::isspace(curr_char_) || curr_char_ == ',')
             {
                 //state_ = State::NONE;
+            }
+            else
+            {
+                // the previous is not space and the curr_char_ is non-sense
+                state_ = State::ERROR;
+                error_flag_ = true;
+                error_msg_ = "none meaningful input after the space";
+                token_ = Token();
             }
         }
 
@@ -163,6 +190,7 @@ inline void Lexer::handle_eof_state()
 {
     token_ = Token("eof", TokenType::END_OF_FILE, TokenValue::END_OF_FILE);
     buffer_.clear();
+    state_ = State::END_OF_FILE;
 }
 
 inline void Lexer::handle_identifier_state()
@@ -194,10 +222,8 @@ inline void Lexer::handle_identifier_state()
             move_to_next_char();
         }
         char z = curr_char_;
-        if (
-            (
-                (std::isalpha(a) && std::isalpha(z)) || (std::isdigit(a) && std::isdigit(z))) &&
-            s1 == ' ' && to_t == 't' && to_o == 'o' && s2 == ' ')
+        if (((std::isalpha(a) && std::isalpha(z)) || (std::isdigit(a) && std::isdigit(z))) &&
+            s1 == ' ' && std::tolower(to_t) == 't' && std::tolower(to_o) == 'o' && s2 == ' ')
         {
             buffer_.push_back(a);
             buffer_.push_back(z);
@@ -212,10 +238,33 @@ inline void Lexer::handle_identifier_state()
             buffer_.push_back(std::tolower(curr_char_)); // because it's case insensitive
             move_to_next_char();
 
-            // TODO: something is the prefix of something
-            // exactly, exactly 1 time, exactly 1 times
-            // once, once or more
             found = dictionary_.has_token(buffer_);
+            if (found && dictionary_.token_is_prefix(buffer_))
+            {
+                // something is the prefix of something
+                // exactly, exactly 1 time, exactly 1 times
+                // once, once or more
+                // we peek forward and see the longest possible thing
+                string tmp_buffer = buffer_;
+                size_t end_idx = 0;
+                for (size_t i = 0;
+                    i <= dictionary_.get_key_max_length() - buffer_.length() && peek_next_char(i) !='\0';
+                    i++)
+                {
+                    tmp_buffer.push_back(peek_next_char(i));
+                    if (dictionary_.has_token(tmp_buffer))
+                    {
+                        // new key word found
+                        end_idx = i;
+                    }
+                }
+                for (size_t i = 0; i <= end_idx; i++)
+                {
+                    buffer_.push_back(curr_char_);
+                    move_to_next_char();
+                }
+            }
+            
         } while (
             !found &&
             (std::isalpha(curr_char_) || (curr_char_ == ' ' && peek_next_char() != ' ') // or std::isspace()
@@ -235,13 +284,19 @@ inline void Lexer::handle_identifier_state()
 
     if (!found)
     {
-        // then we have trouble, we could not find any available identifier
-        // TODO
+        // then we have trouble
+        state_ = State::ERROR;
+        error_flag_ = true;
+        error_msg_ = "we could not find any available identifier";
+
         token_ = Token();
+    }
+    else
+    {
+        state_ = State::NONE;
     }
 
     buffer_.clear();
-    state_ = State::NONE;
 }
 
 inline void Lexer::handle_number_state()
@@ -268,18 +323,20 @@ inline void Lexer::handle_string_state(char string_state_delimiter)
 
     if (curr_char_ == '\0')
     {
-        // then we have a trouble, the string literal does not end correctly
-        // TODO
+        // then we have a trouble
+        state_ = State::ERROR;
+        error_flag_ = true;
+        error_msg_ = "the string literal does not end correctly";
         token_ = Token();
     }
     else
     {
-        move_to_next_char(); // eat the right '\"'
+        move_to_next_char(); // eat the right '\"', curr_char_ is the one on the right of '\"'        
         token_ = Token(buffer_, TokenType::SRC_STRING, TokenValue::STRING);
+        state_ = State::NONE;
     }
-
     buffer_.clear();
-    state_ = State::NONE;
+ 
 }
 }
 

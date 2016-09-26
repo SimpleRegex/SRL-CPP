@@ -10,10 +10,12 @@
 #include "spre/token.hpp"
 #include <string>
 #include <tuple>
+#include <unordered_set>
 #include <unordered_map>
 
 using std::tuple;
 using std::make_tuple;
+using std::unordered_set;
 using std::unordered_map;
 using std::string;
 
@@ -27,6 +29,7 @@ class Dictionary
     Dictionary();
     ~Dictionary();
     bool has_token(const string &name) const;
+    bool token_is_prefix(const string &name) const;
     size_t get_key_max_length() const;
     MetaType get(const string &name) const;
     TokenType get_token_type(const string &name) const;
@@ -34,6 +37,7 @@ class Dictionary
 
   private:
     unordered_map<string, MetaType> dictionary_;
+    unordered_set<string> prefix_;
     size_t key_max_len_; // cache the max length of all the keys!
 };
 
@@ -141,7 +145,8 @@ Dictionary::Dictionary() : dictionary_{
                                 make_tuple(TokenType::DELIMITER, TokenValue::GROUP_START)},
                                {")",
                                 make_tuple(TokenType::DELIMITER, TokenValue::GROUP_END)}},
-                           key_max_len_(0)
+                            prefix_{"exactly", "once", "time", "times"},
+                            key_max_len_(0)
 {
     for (auto const &iter : dictionary_)
     {
@@ -165,6 +170,12 @@ inline bool Dictionary::has_token(const string &name) const
 {
     auto iter = dictionary_.find(name);
     return iter != dictionary_.end();
+}
+
+inline bool Dictionary::token_is_prefix(const string &name) const
+{
+    auto iter = prefix_.find(name);
+    return iter != prefix_.end();
 }
 
 inline MetaType Dictionary::get(const string &name) const

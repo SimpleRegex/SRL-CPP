@@ -7,13 +7,12 @@
 #include "spre/dictionary.hpp"
 
 int main() {
-	spre::Lexer lexer("letter \"haha\"");
+	spre::Lexer lexer("literally \"haha\" once or more");
 	
-	while (!lexer.has_ended())
+	while (!lexer.has_error() && !lexer.has_ended())
 	{
 		std::cout << lexer.get_next_token().get_value() << std::endl;
 	}
-	std::cout << lexer.get_next_token().get_value() << std::endl;
 
     return 0;
 }
