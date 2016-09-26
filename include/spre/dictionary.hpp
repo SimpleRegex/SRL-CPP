@@ -10,8 +10,8 @@
 #include "spre/token.hpp"
 #include <string>
 #include <tuple>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 
 using std::tuple;
 using std::make_tuple;
@@ -145,8 +145,7 @@ Dictionary::Dictionary() : dictionary_{
                                 make_tuple(TokenType::DELIMITER, TokenValue::GROUP_START)},
                                {")",
                                 make_tuple(TokenType::DELIMITER, TokenValue::GROUP_END)}},
-                            prefix_{"exactly", "once", "time", "times"},
-                            key_max_len_(0)
+                           prefix_{"exactly", "once", "time", "times"}, key_max_len_(0)
 {
     for (auto const &iter : dictionary_)
     {

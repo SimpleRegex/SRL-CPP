@@ -3,8 +3,8 @@
 
 #include "spre/dictionary.hpp"
 #include "spre/token.hpp"
-//#include <iostream>
 #include <cctype>
+#include <cstdio>
 #include <string>
 
 using std::string;
@@ -19,6 +19,7 @@ class Lexer
     Token get_token() const;
     Token get_next_token();
     bool has_error() const;
+    void report_error() const;
     bool has_ended() const;
 
     enum class State
@@ -40,8 +41,8 @@ class Lexer
     State state_;
     Token token_;
     Dictionary dictionary_;
-	bool error_flag_;
-	string error_msg_;
+    bool error_flag_;
+    string error_msg_;
 
     void move_to_next_char();
     char peek_prev_char(size_t k = 1) const;
@@ -54,7 +55,7 @@ class Lexer
 
 Lexer::Lexer(const string &src) : src_(src), src_len_(src.length()),
                                   src_cursor_(0), curr_char_(' '),
-                                  token_(Token()), state_(State::NONE), 
+                                  token_(Token()), state_(State::NONE),
                                   error_flag_(false)
 {
 }
@@ -71,6 +72,16 @@ inline Token Lexer::get_token() const
 inline bool Lexer::has_error() const
 {
     return state_ == State::ERROR;
+}
+
+inline void Lexer::report_error() const
+{
+    if (!has_error())
+    {
+        return;
+    }
+    fprintf(stderr, "%s", error_msg_.c_str());
+    fprintf(stderr, "\n");
 }
 
 inline bool Lexer::has_ended() const
@@ -121,7 +132,8 @@ inline Token Lexer::get_next_token()
         switch (state_)
         {
         case State::NONE:
-            if (curr_char_ != '\0') {
+            if (curr_char_ != '\0')
+            {
                 move_to_next_char();
             }
             else
@@ -248,8 +260,8 @@ inline void Lexer::handle_identifier_state()
                 string tmp_buffer = buffer_;
                 size_t end_idx = 0;
                 for (size_t i = 0;
-                    i <= dictionary_.get_key_max_length() - buffer_.length() && peek_next_char(i) !='\0';
-                    i++)
+                     i <= dictionary_.get_key_max_length() - buffer_.length() && peek_next_char(i) != '\0';
+                     i++)
                 {
                     tmp_buffer.push_back(peek_next_char(i));
                     if (dictionary_.has_token(tmp_buffer))
@@ -264,7 +276,7 @@ inline void Lexer::handle_identifier_state()
                     move_to_next_char();
                 }
             }
-            
+
         } while (
             !found &&
             (std::isalpha(curr_char_) || (curr_char_ == ' ' && peek_next_char() != ' ') // or std::isspace()
@@ -331,12 +343,11 @@ inline void Lexer::handle_string_state(char string_state_delimiter)
     }
     else
     {
-        move_to_next_char(); // eat the right '\"', curr_char_ is the one on the right of '\"'        
+        move_to_next_char(); // eat the right '\"', curr_char_ is the one on the right of '\"'
         token_ = Token(buffer_, TokenType::SRC_STRING, TokenValue::STRING);
         state_ = State::NONE;
     }
     buffer_.clear();
- 
 }
 }
 

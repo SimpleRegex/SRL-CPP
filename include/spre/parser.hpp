@@ -1,12 +1,12 @@
 #ifndef SIMPLEREGEXLANGUAGE_PARSER_H_
 #define SIMPLEREGEXLANGUAGE_PARSER_H_
 
-#include <string>
-//#include <iostream>
 #include "spre/ast.hpp"
 #include "spre/lexer.hpp"
 #include "spre/token.hpp"
+#include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 using std::string;
@@ -21,6 +21,8 @@ class Parser
   public:
     explicit Parser(Lexer &lexer);
     ~Parser();
+    bool has_error() const;
+    void report_error() const;
     vector<unique_ptr<ExprAST>> parse();
 
   private:
@@ -45,11 +47,27 @@ Parser::~Parser()
 {
 }
 
+inline bool Parser::has_error() const
+{
+    return error_flag_;
+}
+
+inline void Parser::report_error() const
+{
+    if (!has_error())
+    {
+        return;
+    }
+    fprintf(stderr, "%s", error_msg_.c_str());
+    fprintf(stderr, "\n");
+}
+
 inline vector<unique_ptr<ExprAST>> Parser::parse()
 {
     vector<unique_ptr<ExprAST>> asts;
+    bool eof = false;
 
-    while (!error_flag_)
+    while (!error_flag_ && !eof)
     {
         Token token = lexer_.get_token();
 
@@ -59,32 +77,33 @@ inline vector<unique_ptr<ExprAST>> Parser::parse()
             asts.push_back(std::move(parse_character(token.get_token_value())));
             break;
         case TokenType::QUANTIFIER:
-            // they should not appeared singly
             asts.push_back(std::move(parse_quantifier(token.get_token_value())));
             break;
         case TokenType::GROUP:
-            parse_group(token.get_token_value());
+            asts.push_back(std::move(parse_group(token.get_token_value())));
             break;
         case TokenType::LOOKAROUND:
-            parse_lookaround(token.get_token_value());
+            asts.push_back(std::move(parse_lookaround(token.get_token_value())));
             break;
         case TokenType::FLAG:
-            parse_flag(token.get_token_value());
+            asts.push_back(std::move(parse_flag(token.get_token_value())));
             break;
         case TokenType::ANCHOR:
-            parse_anchor(token.get_token_value());
+            asts.push_back(std::move(parse_anchor(token.get_token_value())));
             break;
         case TokenType::END_OF_FILE:
             // we are good
+            eof = true;
             break;
         case TokenType::UNDEFINED:
-            // ???
+            error_flag_ = true;
+            error_msg_ = "so invalid ast met, some errors happened";
             break;
         default:
             break;
         }
     }
-    return asts;
+    return std::move(asts);
 }
 
 inline unique_ptr<CharacterExprAST> Parser::parse_character(const TokenValue &token_value)
@@ -450,7 +469,7 @@ inline unique_ptr<LookAroundExprAST> Parser::parse_lookaround(const TokenValue &
         if (str.get_token_value() == TokenValue::STRING)
         {
             string symbol =
-                (token_value == TokenValue::IF_ALREADY_HAD ? "?<!" : "?<=");
+                (token_value == TokenValue::IF_ALREADY_HAD ? "?<=" : "?<!");
             ptr = make_unique<LookAroundExprAST>(
                 vector<string>{"(" + symbol + "(?:" + str.get_value() + "))"});
             lexer_.get_next_token();
