@@ -1,3 +1,22 @@
+/*
+ * basically to look up the token
+ *
+ *
+ * everytime calling lexer.get_next_token(), we will update the 
+ * lexer.get_token(). It should be able to be called multiple times
+ * until lexer.has_ended() || lexer.has_error().
+ * 
+ * Inside the implementation, we have a cursor pointing to the next
+ * char to lexer.curr_char_. Everytime the get_next_token() is called, 
+ * we will try to scan from (with) curr_char_ to the end char, then 
+ * set the curr_char_ as the one **right after** the valid token. This
+ * is important to keep this invariant. Furthermore, in the Lexer level,
+ * we only focus on the identifier (including keywords, "(", ")", ","),
+ * and string literal surrounded, and number, and space, and eof, 
+ * and error!
+ * 
+ */
+
 #ifndef SIMPLEREGEXLANGUAGE_LEXER_H_
 #define SIMPLEREGEXLANGUAGE_LEXER_H_
 
@@ -24,11 +43,12 @@ class Lexer
 
     enum class State
     {
-        NONE,
-        END_OF_FILE,
         IDENTIFIER,
         NUMBER,
         STRING,
+
+        NONE,
+        END_OF_FILE,
         ERROR
     };
 
@@ -119,81 +139,81 @@ inline char Lexer::peek_next_char(size_t k) const
 
 inline Token Lexer::get_next_token()
 {
-    bool is_matched = false;
-    char string_state_delimiter = '\"';
+    // after running the previous get_next_token()
+    // normally state_ == State::NONE
+    // specially state_ == State::ERROR
+    // specially state_ == State::END_OF_FILE
 
-    do
+    //---------------------------------------------------------------
+    // some error checks
+    //---------------------------------------------------------------
+
+    if (state_ == State::ERROR || state_ == State::END_OF_FILE)
     {
-        if (state_ != State::NONE)
-        {
-            is_matched = true;
-        }
+        return token_;
+    }
 
-        switch (state_)
-        {
-        case State::NONE:
-            if (curr_char_ != '\0')
-            {
-                move_to_next_char();
-            }
-            else
-            {
-                handle_eof_state();
-            }
-            break;
-        case State::END_OF_FILE:
-            handle_eof_state();
-            break;
-        case State::IDENTIFIER:
-            handle_identifier_state();
-            break;
-        case State::NUMBER:
-            handle_number_state();
-            break;
-        case State::STRING:
-            handle_string_state(string_state_delimiter);
-            break;
-        case State::ERROR:
-            // do nothing and end
-            break;
-        default:
-            break;
-        }
+    if (curr_char_ == '\0')
+    {
+        handle_eof_state();
+        return token_;
+    }
 
-        if (state_ == State::NONE)
-        {
-            if (std::isalpha(curr_char_) || curr_char_ == '(' || curr_char_ == ')')
-            {
-                state_ = State::IDENTIFIER;
-            }
-            else if (std::isdigit(curr_char_))
-            {
-                state_ = State::NUMBER;
-            }
-            else if (curr_char_ == '\"' || curr_char_ == '\'')
-            {
-                state_ = State::STRING;
-                string_state_delimiter = curr_char_;
-            }
-            else if (curr_char_ == '\0')
-            {
-                state_ = State::NONE; // delay to next calling get_next_token()
-            }
-            else if (std::isspace(curr_char_) || curr_char_ == ',')
-            {
-                //state_ = State::NONE;
-            }
-            else
-            {
-                // the previous is not space and the curr_char_ is non-sense
-                state_ = State::ERROR;
-                error_flag_ = true;
-                error_msg_ = "none meaningful input after the space";
-                token_ = Token();
-            }
-        }
+    if (!std::isspace(curr_char_) && curr_char_ != ',')
+    {
+        state_ = State::ERROR;
+        error_flag_ = true;
+        error_msg_ = "you miss some necassary whitespaces";
+        token_ = Token();
+        return token_;
+    }
 
-    } while (!is_matched);
+    //---------------------------------------------------------------
+    // aggressively move forward until the first none whitespace
+    //---------------------------------------------------------------
+
+    while (std::isspace(curr_char_) || curr_char_ == ',')
+    {
+        move_to_next_char();
+    }
+
+    //---------------------------------------------------------------
+    // doing actual things
+    //---------------------------------------------------------------
+
+    if (token_.get_token_value() == TokenValue::FROM)
+    {
+        // special, try reading "to"
+        state_ = State::IDENTIFIER;
+        handle_identifier_state();
+    }
+    else if (std::isalpha(curr_char_) || curr_char_ == '(' || curr_char_ == ')')
+    {
+        state_ = State::IDENTIFIER;
+        handle_identifier_state();
+    }
+    else if (std::isdigit(curr_char_))
+    {
+        state_ = State::NUMBER;
+        handle_number_state();
+    }
+    else if (curr_char_ == '\"' || curr_char_ == '\'')
+    {
+        state_ = State::STRING;
+        handle_string_state(curr_char_);
+    }
+    else if (curr_char_ == '\0')
+    {
+        state_ = State::END_OF_FILE;
+        handle_eof_state();
+    }
+    else
+    {
+        state_ = State::ERROR;
+        error_flag_ = true;
+        error_msg_ = "none meaningful input?";
+        token_ = Token();
+    }
 
     return token_;
 }
@@ -208,7 +228,6 @@ inline void Lexer::handle_eof_state()
 inline void Lexer::handle_identifier_state()
 {
     // try to find the keywords inside the dictionary
-    bool found = false;
     if (token_.get_token_value() == TokenValue::FROM)
     {
         // special case, from a to z
@@ -237,77 +256,70 @@ inline void Lexer::handle_identifier_state()
         if (((std::isalpha(a) && std::isalpha(z)) || (std::isdigit(a) && std::isdigit(z))) &&
             s1 == ' ' && std::tolower(to_t) == 't' && std::tolower(to_o) == 'o' && s2 == ' ')
         {
+
             buffer_.push_back(a);
             buffer_.push_back(z);
             token_ = Token(buffer_, TokenType::CHARACTER, TokenValue::TO);
-            found = true;
+            buffer_.clear();
+            state_ = State::NONE;
+            return;
         }
+        else
+        {
+            // the "to" part is invalid, so we have a invalid token
+            buffer_.clear();
+            state_ = State::ERROR;
+            error_flag_ = true;
+            error_msg_ = "the \"to\" part is invalid";
+            token_ = Token();
+            return;
+        }
+    }
+
+    bool found = false;
+    while (buffer_.length() < dictionary_.get_key_max_length() && (std::isalpha(curr_char_) || curr_char_ == ' ') && !found)
+    {
+        buffer_.push_back(std::tolower(curr_char_));
+        move_to_next_char();
+
+        found = dictionary_.has_token(buffer_);
+
+        if (found && dictionary_.token_is_prefix(buffer_))
+        {
+            size_t end = 0;
+            string tmp_buffer = buffer_;
+            for (size_t i = 0;
+                 i < dictionary_.get_key_max_length() - buffer_.length() && peek_next_char(i) != '\0';
+                 i++)
+            {
+                tmp_buffer.push_back(peek_next_char(i));
+                if (dictionary_.has_token(tmp_buffer))
+                {
+                    end = i + 1; // so that end is the position exclusive
+                }
+            }
+            for (size_t i = 0; i < end; i++)
+            {
+                buffer_.push_back(curr_char_);
+                move_to_next_char();
+            }
+        }
+    }
+
+    if (found)
+    {
+        state_ = State::NONE;
+        token_ = Token(buffer_,
+                       dictionary_.get_token_type(buffer_),
+                       dictionary_.get_token_value(buffer_));
     }
     else
     {
-        do
-        {
-            buffer_.push_back(std::tolower(curr_char_)); // because it's case insensitive
-            move_to_next_char();
-
-            found = dictionary_.has_token(buffer_);
-            if (found && dictionary_.token_is_prefix(buffer_))
-            {
-                // something is the prefix of something
-                // exactly, exactly 1 time, exactly 1 times
-                // once, once or more
-                // we peek forward and see the longest possible thing
-                string tmp_buffer = buffer_;
-                size_t end_idx = 0;
-                for (size_t i = 0;
-                     i <= dictionary_.get_key_max_length() - buffer_.length() && peek_next_char(i) != '\0';
-                     i++)
-                {
-                    tmp_buffer.push_back(peek_next_char(i));
-                    if (dictionary_.has_token(tmp_buffer))
-                    {
-                        // new key word found
-                        end_idx = i;
-                    }
-                }
-                for (size_t i = 0; i <= end_idx; i++)
-                {
-                    buffer_.push_back(curr_char_);
-                    move_to_next_char();
-                }
-            }
-
-        } while (
-            !found &&
-            (std::isalpha(curr_char_) || (curr_char_ == ' ' && peek_next_char() != ' ') // or std::isspace()
-             || buffer_.length() <= dictionary_.get_key_max_length()));
-
-        if (found)
-        {
-            token_ = Token(buffer_,
-                           dictionary_.get_token_type(buffer_),
-                           dictionary_.get_token_value(buffer_));
-        }
-    }
-    // the identifiers / keys in srl
-    // are all alpha or at most one ' ' between words
-    // no line breaks allowed here
-    // and they cannot exceed the max length of all the keys
-
-    if (!found)
-    {
-        // then we have trouble
         state_ = State::ERROR;
         error_flag_ = true;
         error_msg_ = "we could not find any available identifier";
-
         token_ = Token();
     }
-    else
-    {
-        state_ = State::NONE;
-    }
-
     buffer_.clear();
 }
 

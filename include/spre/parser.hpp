@@ -67,9 +67,10 @@ inline vector<unique_ptr<ExprAST>> Parser::parse()
     vector<unique_ptr<ExprAST>> asts;
     bool eof = false;
 
-    while (!error_flag_ && !eof)
+    while (!lexer_.has_error() && !error_flag_ && !eof)
     {
         Token token = lexer_.get_token();
+        //std::cout << token.get_value() << "\n";
 
         switch (token.get_token_type())
         {
