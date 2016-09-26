@@ -1,47 +1,44 @@
 #ifndef SIMPLEREGEXLANGUAGE_SPRE_H_
 #define SIMPLEREGEXLANGUAGE_SPRE_H_
 
-#include "spre/parser.hpp"
 #include "spre/generator.hpp"
+#include "spre/parser.hpp"
 
 namespace spre
 {
-	class SRL
-	{
-	public:
-		SRL();
-		~SRL();
+class SRL
+{
+  public:
+    SRL();
+    ~SRL();
 
-	private:
+  private:
+};
 
-	};
+SRL::SRL()
+{
+}
 
-	SRL::SRL()
-	{
-	}
+SRL::~SRL()
+{
+}
 
-	SRL::~SRL()
-	{
-	}
+class Builder
+{
+  public:
+    Builder();
+    ~Builder();
 
+  private:
+};
 
-	class Builder
-	{
-	public:
-		Builder();
-		~Builder();
+Builder::Builder()
+{
+}
 
-	private:
-
-	};
-
-	Builder::Builder()
-	{
-	}
-
-	Builder::~Builder()
-	{
-	}
+Builder::~Builder()
+{
+}
 }
 
 #endif // !SIMPLEREGEXLANGUAGE_SPRE_H_

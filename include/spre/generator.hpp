@@ -5,23 +5,23 @@
 
 namespace spre
 {
-	class Generator
-	{
-	public:
-		Generator(Parser &parser);
-		~Generator();
+class Generator
+{
+  public:
+    Generator(Parser &parser);
+    ~Generator();
 
-	private:
-		Parser parser_;
-	};
+  private:
+    Parser parser_;
+};
 
-	Generator::Generator(Parser &parser): parser_(parser)
-	{
-	}
+Generator::Generator(Parser &parser) : parser_(parser)
+{
+}
 
-	Generator::~Generator()
-	{
-	}
+Generator::~Generator()
+{
+}
 }
 
 #endif // !SIMPLEREGEXLANGUAGE_GENERATOR_H_

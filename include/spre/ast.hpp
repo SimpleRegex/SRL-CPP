@@ -7,201 +7,199 @@
 #ifndef SIMPLEREGEXLANGUAGE_AST_H_
 #define SIMPLEREGEXLANGUAGE_AST_H_
 
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 using std::string;
 using std::vector;
 using std::unique_ptr;
 
-
 namespace spre
 {
-	class ExprAST
-	{
-	public:
-		virtual string get_val() const = 0;
-		virtual ~ExprAST() = default;
-	};
+class ExprAST
+{
+  public:
+    virtual string get_val() const = 0;
+    virtual ~ExprAST() = default;
+};
 
+class CharacterExprAST : public ExprAST
+{
+  public:
+    CharacterExprAST(const string &val = "");
+    string get_val() const override;
 
-	class CharacterExprAST: public ExprAST
-	{
-	public:
-		CharacterExprAST(const string &val = "");
-		string get_val() const override;
-	private:
-		const string val_;
-	};
+  private:
+    const string val_;
+};
 
-	CharacterExprAST::CharacterExprAST(const string &val): val_(val)
-	{
-	}
+CharacterExprAST::CharacterExprAST(const string &val) : val_(val)
+{
+}
 
-	inline string CharacterExprAST::get_val() const
-	{
-		return val_;
-	}
+inline string CharacterExprAST::get_val() const
+{
+    return val_;
+}
 
+class QuantifierExprAST : public ExprAST
+{
+  public:
+    QuantifierExprAST(const string &val);
+    string get_val() const override;
 
-	class QuantifierExprAST: public ExprAST
-	{
-	public:
-		QuantifierExprAST(const string &val);
-		string get_val() const override;
-	private:
-		const string val_;
-	};
+  private:
+    const string val_;
+};
 
-	QuantifierExprAST::QuantifierExprAST(const string &val): val_(val)
-	{
-	}
+QuantifierExprAST::QuantifierExprAST(const string &val) : val_(val)
+{
+}
 
-	inline string QuantifierExprAST::get_val() const
-	{
-		return val_;
-	}
+inline string QuantifierExprAST::get_val() const
+{
+    return val_;
+}
 
+class GroupExprAST : public ExprAST
+{
+  public:
+    GroupExprAST(vector<unique_ptr<ExprAST>> cond);
+    GroupExprAST(vector<unique_ptr<ExprAST>> cond,
+                 const string &name, vector<unique_ptr<ExprAST>> until_cond);
+    void set_name(const string &name);
+    void set_until_cond(vector<unique_ptr<ExprAST>> until_cond);
+    string get_val() const override;
 
-	class GroupExprAST : public ExprAST
-	{
-	public:
-		GroupExprAST(vector<unique_ptr<ExprAST>> cond);
-		GroupExprAST(vector<unique_ptr<ExprAST>> cond,
-			const string &name, vector<unique_ptr<ExprAST>> until_cond);
-		void set_name(const string &name);
-		void set_until_cond(vector<unique_ptr<ExprAST>> until_cond);
-		string get_val() const override;
-	private:
-		vector<unique_ptr<ExprAST>> cond_;
-		string name_;
-		vector<unique_ptr<ExprAST>> until_cond_; // maybe useless
-	};
+  private:
+    vector<unique_ptr<ExprAST>> cond_;
+    string name_;
+    vector<unique_ptr<ExprAST>> until_cond_; // maybe useless
+};
 
-	GroupExprAST::GroupExprAST(vector<unique_ptr<ExprAST>> cond)
-		: cond_(std::move(cond))
-	{
-	}
+GroupExprAST::GroupExprAST(vector<unique_ptr<ExprAST>> cond)
+    : cond_(std::move(cond))
+{
+}
 
-	GroupExprAST::GroupExprAST(vector<unique_ptr<ExprAST>> cond,
-		const string &name, vector<unique_ptr<ExprAST>> until_cond)
-		: cond_(std::move(cond)), name_(name), until_cond_(std::move(until_cond))
-	{
-	}
+GroupExprAST::GroupExprAST(vector<unique_ptr<ExprAST>> cond,
+                           const string &name, vector<unique_ptr<ExprAST>> until_cond)
+    : cond_(std::move(cond)), name_(name), until_cond_(std::move(until_cond))
+{
+}
 
-	inline void GroupExprAST::set_name(const string &name)
-	{
-		name_ = name;
-	}
-	
-	inline void GroupExprAST::set_until_cond(vector<unique_ptr<ExprAST>> until_cond)
-	{
-		until_cond_ = std::move(until_cond);
-	}
-	
-	inline string GroupExprAST::get_val() const
-	{
-		if (cond_.size() != 0)
-		{
-			string res = "(";
+inline void GroupExprAST::set_name(const string &name)
+{
+    name_ = name;
+}
 
-			if (name_.size() != 0)
-			{
-				res.append("<");
-				res.append(name_);
-				res.append(">");
-			}
+inline void GroupExprAST::set_until_cond(vector<unique_ptr<ExprAST>> until_cond)
+{
+    until_cond_ = std::move(until_cond);
+}
 
-			for (auto const &iter : cond_)
-			{
-				res.append(iter->get_val());
-			}
-			res.append(")");
-			return res;
-		}
+inline string GroupExprAST::get_val() const
+{
+    if (cond_.size() != 0)
+    {
+        string res = "(";
 
-		// error!
-		return "";
-	}
+        if (name_.size() != 0)
+        {
+            res.append("<");
+            res.append(name_);
+            res.append(">");
+        }
 
+        for (auto const &iter : cond_)
+        {
+            res.append(iter->get_val());
+        }
+        res.append(")");
+        return res;
+    }
 
-	class LookAroundExprAST : public ExprAST
-	{
-	public:
-		LookAroundExprAST(const vector<string> vals, 
-			vector<unique_ptr<ExprAST>> cond = vector<unique_ptr<ExprAST>>());
-		string get_val() const override;
-	private:
-		const vector<string> vals_;
-		vector<unique_ptr<ExprAST>> cond_;
-	};
+    // error!
+    return "";
+}
 
-	LookAroundExprAST::LookAroundExprAST(const vector<string> vals,
-		vector<unique_ptr<ExprAST>> cond)
-		: vals_(std::move(vals)), cond_(std::move(cond))
-	{
-	}
+class LookAroundExprAST : public ExprAST
+{
+  public:
+    LookAroundExprAST(const vector<string> vals,
+                      vector<unique_ptr<ExprAST>> cond = vector<unique_ptr<ExprAST>>());
+    string get_val() const override;
 
-	inline string LookAroundExprAST::get_val() const
-	{
-		if (vals_.size() == 1)
-		{
-			return vals_[0];
-		}
-		if (vals_.size() == 2 && cond_.size() != 0)
-		{
-			string res = vals_[0];
-			for (auto const &iter: cond_)
-			{
-				res.append(iter->get_val());
-			}
-			res.append(vals_[1]);
-			return res;
-		}
+  private:
+    const vector<string> vals_;
+    vector<unique_ptr<ExprAST>> cond_;
+};
 
-		// error!
-		return ""; 
-	}
+LookAroundExprAST::LookAroundExprAST(const vector<string> vals,
+                                     vector<unique_ptr<ExprAST>> cond)
+    : vals_(std::move(vals)), cond_(std::move(cond))
+{
+}
 
+inline string LookAroundExprAST::get_val() const
+{
+    if (vals_.size() == 1)
+    {
+        return vals_[0];
+    }
+    if (vals_.size() == 2 && cond_.size() != 0)
+    {
+        string res = vals_[0];
+        for (auto const &iter : cond_)
+        {
+            res.append(iter->get_val());
+        }
+        res.append(vals_[1]);
+        return res;
+    }
 
-	class FlagExprAST : public ExprAST
-	{
-	public:
-		FlagExprAST(const string &val);
-		string get_val() const override;
-	private:
-		const string val_;
-	};
+    // error!
+    return "";
+}
 
-	FlagExprAST::FlagExprAST(const string &val) : val_(val)
-	{
-	}
+class FlagExprAST : public ExprAST
+{
+  public:
+    FlagExprAST(const string &val);
+    string get_val() const override;
 
-	inline string FlagExprAST::get_val() const
-	{
-		return val_;
-	}
+  private:
+    const string val_;
+};
 
+FlagExprAST::FlagExprAST(const string &val) : val_(val)
+{
+}
 
-	class AnchorExprAST : public ExprAST
-	{
-	public:
-		AnchorExprAST(const string &val);
-		string get_val() const override;
-	private:
-		const string val_;
-	};
+inline string FlagExprAST::get_val() const
+{
+    return val_;
+}
 
-	AnchorExprAST::AnchorExprAST(const string &val) : val_(val)
-	{
-	}
+class AnchorExprAST : public ExprAST
+{
+  public:
+    AnchorExprAST(const string &val);
+    string get_val() const override;
 
-	inline string AnchorExprAST::get_val() const
-	{
-		return val_;
-	}
+  private:
+    const string val_;
+};
 
+AnchorExprAST::AnchorExprAST(const string &val) : val_(val)
+{
+}
+
+inline string AnchorExprAST::get_val() const
+{
+    return val_;
+}
 }
 
 #endif // !SIMPLEREGEXLANGUAGE_AST_H_
