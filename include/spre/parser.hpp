@@ -78,7 +78,10 @@ inline vector<unique_ptr<ExprAST>> Parser::parse()
         {
             eof = true;
         }
-        asts.push_back(std::move(parse_token(token)));
+
+        unique_ptr<ExprAST> ptr = parse_token(token);
+
+        asts.push_back(std::move(ptr));
     }
     return std::move(asts);
 }
@@ -442,23 +445,48 @@ inline unique_ptr<GroupExprAST> Parser::parse_group(const TokenValue &token_valu
  
     case TokenValue::UNTIL:
     {
-        Token str_or_group_start = lexer_.get_next_token();
-        switch (str_or_group_start.get_token_value())
+        // similar to capture and lookaround
+
+        Token guess = lexer_.get_next_token();
+        vector<unique_ptr<ExprAST>> cond;
+
+        switch (guess.get_token_value())
         {
         case TokenValue::STRING:
-            // TODO
+            cond.push_back(std::move(make_unique<CharacterExprAST>("(?:" + guess.get_value() + ")")));
+            lexer_.get_next_token();
             break;
         case TokenValue::GROUP_START:
-            // TODO
+            lexer_.get_next_token(); // after parsing "(", now the token become the inside part
+            do
+            {
+                cond.push_back(std::move(parse_token(lexer_.get_token())));
+                // after parsing, lexer_.get_token() become the one following.
+            } while (lexer_.get_token().get_token_value() != TokenValue::GROUP_END
+                && lexer_.get_token().get_token_type() != TokenType::END_OF_FILE
+                && lexer_.get_token().get_token_type() != TokenType::UNDEFINED);
+            // after parsing the sub query, current token should be ")"!!!
+
+            if (lexer_.get_token().get_token_value() != TokenValue::GROUP_END)
+            {
+                ptr = nullptr;
+                error_flag_ = true;
+                error_msg_ = "the until condition doesn't end correctly";
+                return ptr;
+            }
+
+            lexer_.get_next_token(); // now the current one is the one after ")"
             break;
         default:
-            ptr = nullptr;
             error_flag_ = true;
-            error_msg_ = "the thing after \"until\" should be string or sub group";
-            break;
+            error_msg_ = "the until part doesn't have correct following statements";
+            return ptr;
+            //break;
         }
 
-		break;
+        ptr = make_unique<GroupExprAST>(std::move(cond));
+        return ptr;
+		//break;
     }
   
     case TokenValue::ANY_OF:
