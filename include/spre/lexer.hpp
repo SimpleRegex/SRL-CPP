@@ -165,9 +165,9 @@ inline Token Lexer::get_next_token()
         return token_;
     }
 
-    if (curr_char_ == ')')
+    if (curr_char_ == '(' || curr_char_ == ')')
     {
-        // the char before ")" may not be whitespace, so try it here
+        // the char before "(" and ")" may not be whitespace, so try it here
         state_ = State::IDENTIFIER;
         handle_identifier_state();
         return token_;
@@ -277,6 +277,7 @@ inline void Lexer::handle_identifier_state()
             token_ = Token(buffer_, TokenType::CHARACTER, TokenValue::TO);
             buffer_.clear();
             state_ = State::NONE;
+            move_to_next_char();
             return;
         }
         else

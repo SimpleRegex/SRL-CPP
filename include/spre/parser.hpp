@@ -38,6 +38,7 @@ class Parser
     unique_ptr<LookAroundExprAST> parse_lookaround(const TokenValue &token_value);
     unique_ptr<FlagExprAST> parse_flag(const TokenValue &token_value);
     unique_ptr<AnchorExprAST> parse_anchor(const TokenValue &token_value);
+    unique_ptr<EOFExprAST> parse_eof(const TokenValue &token_value);
 };
 
 Parser::Parser(Lexer &lexer, bool show_error) : lexer_(lexer), error_flag_(false), show_error_(show_error)
@@ -108,8 +109,7 @@ inline unique_ptr<ExprAST> Parser::parse_token(const Token &token)
         ptr = std::move(parse_anchor(token.get_token_value()));
         break;
     case TokenType::END_OF_FILE:
-        // we are good
-        //eof = true;
+        ptr = std::move(parse_eof(token.get_token_value()));
         break;
     case TokenType::UNDEFINED:
         error_flag_ = true;
@@ -130,6 +130,7 @@ inline unique_ptr<ExprAST> Parser::parse_token(const Token &token)
 inline unique_ptr<CharacterExprAST> Parser::parse_character(const TokenValue &token_value)
 {
     unique_ptr<CharacterExprAST> ptr = nullptr;
+
     if (token_value == TokenValue::LITERALLY || token_value == TokenValue::ONE_OF || token_value == TokenValue::RAW)
     {
         // expect string literal following
@@ -138,56 +139,34 @@ inline unique_ptr<CharacterExprAST> Parser::parse_character(const TokenValue &to
         {
             error_flag_ = true;
             error_msg_ = "missing string literal";
+            return ptr;
         }
-        else
+
+        string val;
+        switch (token_value)
         {
-            string val;
-            switch (token_value)
-            {
-            case TokenValue::LITERALLY:
-                val = "(?:" + next_token.get_value() + ")";
-                break;
-            case TokenValue::ONE_OF:
-                val = "[" + next_token.get_value() + "]";
-                break;
-            case TokenValue::RAW:
-                val = next_token.get_value();
-                break;
-            default:
-                break;
-            }
-            ptr = make_unique<CharacterExprAST>(val);
-            lexer_.get_next_token(); // so we eat the leagal token
+        case TokenValue::LITERALLY:
+            val = "(?:" + next_token.get_value() + ")";
+            break;
+        case TokenValue::ONE_OF:
+            val = "[" + next_token.get_value() + "]";
+            break;
+        case TokenValue::RAW:
+            val = next_token.get_value();
+            break;
+        default:
+            break;
         }
+        ptr = make_unique<CharacterExprAST>(val);
+        lexer_.get_next_token(); // so we eat the leagal token
+        return ptr;
     }
 
-    else if (token_value == TokenValue::LETTER || token_value == TokenValue::UPPERCASE_LETTER || token_value == TokenValue::DIGIT)
+    if (token_value == TokenValue::LETTER || token_value == TokenValue::UPPERCASE_LETTER || token_value == TokenValue::DIGIT)
     {
-        Token next_token = lexer_.get_next_token();
+        Token guess_from = lexer_.get_next_token();
 
-        if (next_token.get_token_value() == TokenValue::FROM)
-        {
-            Token next_next_token = lexer_.get_next_token();
-            if (next_next_token.get_token_value() == TokenValue::TO)
-            {
-                // so we have the modifier
-                string az = next_next_token.get_value();
-                if (az.length() == 2)
-                {
-                    az.insert(1, "-");
-                    az.insert(0, "[");
-                    az.append("]");
-                    ptr = make_unique<CharacterExprAST>(az);
-                    lexer_.get_next_token(); // so we eat the leagal tokens from and to
-                }
-            }
-            else
-            {
-                error_flag_ = true;
-                error_msg_ = "\"from\" found, but \"to\" not found";
-            }
-        }
-        else
+        if (guess_from.get_token_value() != TokenValue::FROM)
         {
             string val;
             switch (token_value)
@@ -205,49 +184,75 @@ inline unique_ptr<CharacterExprAST> Parser::parse_character(const TokenValue &to
                 break;
             }
             ptr = make_unique<CharacterExprAST>(val);
-            lexer_.get_next_token(); // so we eat the leagal token
+            // now we already at the one after letter/digit/...
+            // because we already move to here for guessing from
+            return ptr;
         }
+
+        Token guess_to = lexer_.get_next_token();
+
+        if (guess_from.get_token_value() != TokenValue::FROM)
+        {
+            error_flag_ = true;
+            error_msg_ = "\"from\" found, but \"to\" not found";
+            return ptr;
+        }
+
+        string az = guess_to.get_value();
+
+        if (az.length() != 2)
+        {
+            error_flag_ = true;
+            error_msg_ = "the range \"from\" and \"to\" is not well defined";
+            return ptr;
+        }
+
+        az.insert(1, "-");
+        az.insert(0, "[");
+        az.append("]");
+        ptr = make_unique<CharacterExprAST>(az);
+        lexer_.get_next_token(); // so we eat the leagal token to
+        return ptr;
+    }
+
+    string val;
+    switch (token_value)
+    {
+    case TokenValue::ANY_CHARACTER:
+        val = "\\w";
+        break;
+    case TokenValue::NO_CHARACTER:
+        val = "\\W";
+        break;
+    case TokenValue::ANYTHING:
+        val = ".";
+        break;
+    case TokenValue::NEW_LINE:
+        val = "\\n";
+        break;
+    case TokenValue::WHITESPACE:
+        val = "\\s";
+        break;
+    case TokenValue::NO_WHITESPACE:
+        val = "\\S";
+        break;
+    case TokenValue::TAB:
+        val = "\\t";
+        break;
+    default:
+        break;
+    }
+    if (val.length() != 0)
+    {
+        ptr = make_unique<CharacterExprAST>(val);
+        lexer_.get_next_token(); // so we eat the leagal token
     }
     else
     {
-        string val;
-        switch (token_value)
-        {
-        case TokenValue::ANY_CHARACTER:
-            val = "\\w";
-            break;
-        case TokenValue::NO_CHARACTER:
-            val = "\\W";
-            break;
-        case TokenValue::ANYTHING:
-            val = ".";
-            break;
-        case TokenValue::NEW_LINE:
-            val = "\\n";
-            break;
-        case TokenValue::WHITESPACE:
-            val = "\\s";
-            break;
-        case TokenValue::NO_WHITESPACE:
-            val = "\\S";
-            break;
-        case TokenValue::TAB:
-            val = "\\t";
-            break;
-        default:
-            break;
-        }
-        if (val.length() != 0)
-        {
-            ptr = make_unique<CharacterExprAST>(val);
-            lexer_.get_next_token(); // so we eat the leagal token
-        }
-        else
-        {
-            error_flag_ = true;
-            error_msg_ = "unknown error";
-        }
+        error_flag_ = true;
+        error_msg_ = "unknown error";
     }
+
 
     return std::move(ptr);
 }
@@ -400,7 +405,7 @@ inline unique_ptr<GroupExprAST> Parser::parse_group(const TokenValue &token_valu
             && lexer_.get_token().get_token_type() != TokenType::END_OF_FILE
             && lexer_.get_token().get_token_type() != TokenType::UNDEFINED);
         // after parsing the sub_query_ptr_vec, current token should be ")"!!!
-        std::cout << "now tokn []"<< lexer_.get_token().get_value() << "[]\n";
+        
         if (lexer_.get_token().get_token_value() != TokenValue::GROUP_END)
         {
             ptr = nullptr;
@@ -579,6 +584,13 @@ inline unique_ptr<AnchorExprAST> Parser::parse_anchor(const TokenValue &token_va
 
     return std::move(ptr);
 }
+
+inline unique_ptr<EOFExprAST> Parser::parse_eof(const TokenValue &token_value)
+{
+    // maybe we check the value in the future?
+    return make_unique<EOFExprAST>();
+}
+
 }
 
 #endif // !SIMPLEREGEXLANGUAGE_PARSER_H_

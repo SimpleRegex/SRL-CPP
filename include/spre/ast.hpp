@@ -200,6 +200,27 @@ inline string AnchorExprAST::get_val() const
 {
     return val_;
 }
+
+
+class EOFExprAST : public ExprAST
+{
+public:
+    EOFExprAST();
+    string get_val() const override;
+
+private:
+};
+
+EOFExprAST::EOFExprAST()
+{
 }
+
+inline string EOFExprAST::get_val() const
+{
+    return "";
+}
+
+}
+
 
 #endif // !SIMPLEREGEXLANGUAGE_AST_H_

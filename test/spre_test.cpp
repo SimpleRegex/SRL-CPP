@@ -3,7 +3,9 @@
 #include "spre/spre.hpp"
 
 int main() {
-	spre::SRL srl("whitespace, literally \"haha\", digit");
+    string src = "literally \"haha\", capture(capture(digit from a to z whitespace) as \"inner\") as \"outer\"";
+    std::cout << "original string:\n" << src << std::endl;
+	spre::SRL srl(src);
     std::cout << "final result:\n" << srl.get_pattern() << std::endl;
 
     return 0;
