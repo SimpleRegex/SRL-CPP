@@ -144,10 +144,6 @@ LookAroundExprAST::LookAroundExprAST(const vector<string> vals,
 
 inline string LookAroundExprAST::get_val() const
 {
-    if (vals_.size() == 1)
-    {
-        return vals_[0];
-    }
     if (vals_.size() == 2 && cond_.size() != 0)
     {
         string res = vals_[0];

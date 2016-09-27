@@ -475,52 +475,63 @@ inline unique_ptr<LookAroundExprAST> Parser::parse_lookaround(const TokenValue &
 {
     unique_ptr<LookAroundExprAST> ptr;
 
+    Token guess = lexer_.get_next_token();
+    vector<unique_ptr<ExprAST>> cond;
+
+    switch (guess.get_token_value())
+    {
+    case TokenValue::STRING:
+        cond.push_back(std::move(make_unique<CharacterExprAST>(guess.get_value())));
+        lexer_.get_next_token();
+        break;
+    case TokenValue::GROUP_START:
+        lexer_.get_next_token(); // after parsing "(", now the token become the inside part
+        do
+        {
+            cond.push_back(std::move(parse_token(lexer_.get_token())));
+            // after parsing, lexer_.get_token() become the one following.
+        } while (lexer_.get_token().get_token_value() != TokenValue::GROUP_END
+            && lexer_.get_token().get_token_type() != TokenType::END_OF_FILE
+            && lexer_.get_token().get_token_type() != TokenType::UNDEFINED);
+        // after parsing the sub query, current token should be ")"!!!
+
+        if (lexer_.get_token().get_token_value() != TokenValue::GROUP_END)
+        {
+            ptr = nullptr;
+            error_flag_ = true;
+            error_msg_ = "the lookaround condition doesn't end correctly";
+            return ptr;
+        }
+        
+        lexer_.get_next_token(); // now the current one is the one after ")"
+        break;
+    default:
+        error_flag_ = true;
+        error_msg_ = "the lookaround part doesn't have correct following statements";
+        return ptr;
+        //break;
+    }
+
     switch (token_value)
     {
     case TokenValue::IF_FOLLOWED_BY:
     case TokenValue::IF_NOT_FOLLOWED_BY:
     {
-        Token group_start = lexer_.get_next_token();
-        vector<unique_ptr<ExprAST>> sub_query_ptrs_vec = parse();
-        // after parsing the sub_query_ptr_vec, current token should be ")"!!!
-        Token group_end = lexer_.get_token();
-        if (group_start.get_token_value() == TokenValue::GROUP_START && group_end.get_token_value() == TokenValue::GROUP_END)
-        {
-            string left_symbol =
-                (token_value == TokenValue::IF_FOLLOWED_BY ? "(?=" : "(?!");
-            ptr = make_unique<LookAroundExprAST>(
-                vector<string>{left_symbol, ")"}, std::move(sub_query_ptrs_vec));
-            lexer_.get_next_token();
-        }
-        else
-        {
-            ptr = nullptr;
-            error_flag_ = true;
-            error_msg_ = "invalid \"if [not] followed by (condition)\"";
-        }
-
+        string left_symbol =
+            (token_value == TokenValue::IF_FOLLOWED_BY ? "(?=" : "(?!");
+        ptr = make_unique<LookAroundExprAST>(
+            vector<string>{left_symbol, ")"}, std::move(cond));
 		break;
     }
 
     case TokenValue::IF_ALREADY_HAD:
     case TokenValue::IF_NOT_ALREADY_HAD:
     {
-        Token str = lexer_.get_next_token();
-        if (str.get_token_value() == TokenValue::STRING)
-        {
-            string symbol =
-                (token_value == TokenValue::IF_ALREADY_HAD ? "?<=" : "?<!");
-            ptr = make_unique<LookAroundExprAST>(
-                vector<string>{"(" + symbol + "(?:" + str.get_value() + "))"});
-            lexer_.get_next_token();
-        }
-        else
-        {
-            ptr = nullptr;
-            error_flag_ = true;
-            error_msg_ = "\"if [not] already had\" should be followed by string literal";
-        }
-
+        string left_symbol =
+            (token_value == TokenValue::IF_ALREADY_HAD ? "?<=" : "?<!");
+        ptr = make_unique<LookAroundExprAST>(
+            vector<string>{left_symbol, ")"});
+        lexer_.get_next_token();
 		break;
     }
  
