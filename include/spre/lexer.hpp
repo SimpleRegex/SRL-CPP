@@ -174,11 +174,12 @@ inline Token Lexer::get_next_token()
     }
 
     if (token_.get_token_value() != TokenValue::GROUP_START
+        && token_.get_token_value() != TokenValue::GROUP_END
         && !std::isspace(curr_char_) && curr_char_ != ',')
     {
         state_ = State::ERROR;
         error_flag_ = true;
-        error_msg_ = "you miss some necassary whitespaces";
+        error_msg_ = "you miss some necessary whitespaces";
         token_ = Token();
         return token_;
     }
@@ -315,7 +316,7 @@ inline void Lexer::handle_identifier_state()
 
     bool found = false;
     while (buffer_.length() < dictionary_.get_key_max_length() 
-           && (std::isalpha(curr_char_) || curr_char_ == ' ' || curr_char_ == ')')
+           && (std::isalpha(curr_char_) || curr_char_ == ' ' || curr_char_ == '(' || curr_char_ == ')')
            && !found)
     {
         buffer_.push_back(std::tolower(curr_char_));

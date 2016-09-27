@@ -74,7 +74,6 @@ inline vector<unique_ptr<ExprAST>> Parser::parse()
     while (!lexer_.has_error() && !error_flag_ && !eof)
     {
         Token token = lexer_.get_token();
-        //std::cout << token.get_value() << "\n";
         if (token.get_token_type() == TokenType::END_OF_FILE)
         {
             eof = true;
@@ -481,7 +480,7 @@ inline unique_ptr<LookAroundExprAST> Parser::parse_lookaround(const TokenValue &
     switch (guess.get_token_value())
     {
     case TokenValue::STRING:
-        cond.push_back(std::move(make_unique<CharacterExprAST>(guess.get_value())));
+        cond.push_back(std::move(make_unique<CharacterExprAST>("(?:"+guess.get_value()+")")));
         lexer_.get_next_token();
         break;
     case TokenValue::GROUP_START:
@@ -528,10 +527,9 @@ inline unique_ptr<LookAroundExprAST> Parser::parse_lookaround(const TokenValue &
     case TokenValue::IF_NOT_ALREADY_HAD:
     {
         string left_symbol =
-            (token_value == TokenValue::IF_ALREADY_HAD ? "?<=" : "?<!");
+            (token_value == TokenValue::IF_ALREADY_HAD ? "(?<=" : "(?<!");
         ptr = make_unique<LookAroundExprAST>(
-            vector<string>{left_symbol, ")"});
-        lexer_.get_next_token();
+            vector<string>{left_symbol, ")"}, std::move(cond));
 		break;
     }
  
