@@ -107,7 +107,7 @@ inline string GroupExprAST::get_val() const
 
         if (name_.size() != 0)
         {
-            res.append("<");
+            res.append("?<");
             res.append(name_);
             res.append(">");
         }

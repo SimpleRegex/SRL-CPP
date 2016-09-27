@@ -33,7 +33,7 @@ namespace spre
 class Lexer
 {
   public:
-    explicit Lexer(const string &src = "");
+    explicit Lexer(const string &src = "", bool show_error = true);
     ~Lexer();
     Token get_token() const;
     Token get_next_token();
@@ -63,6 +63,7 @@ class Lexer
     Dictionary dictionary_;
     bool error_flag_;
     string error_msg_;
+    const bool show_error_;
 
     void move_to_next_char();
     char peek_prev_char(size_t k = 1) const;
@@ -73,10 +74,10 @@ class Lexer
     void handle_string_state(char string_state_delimiter = '\"');
 };
 
-Lexer::Lexer(const string &src) : src_(src), src_len_(src.length()),
-                                  src_cursor_(0), curr_char_(' '),
-                                  token_(Token()), state_(State::NONE),
-                                  error_flag_(false)
+Lexer::Lexer(const string &src, bool show_error) : src_(src), src_len_(src.length()),
+                                                   src_cursor_(0), curr_char_(' '),
+                                                   token_(Token()), state_(State::NONE),
+                                                   error_flag_(false), show_error_(show_error)
 {
 }
 
@@ -100,6 +101,7 @@ inline void Lexer::report_error() const
     {
         return;
     }
+    fprintf(stderr, "lexer error: ");
     fprintf(stderr, "%s", error_msg_.c_str());
     fprintf(stderr, "\n");
 }
@@ -148,6 +150,10 @@ inline Token Lexer::get_next_token()
     // some error checks
     //---------------------------------------------------------------
 
+    if (show_error_) {
+        report_error();
+    }
+
     if (state_ == State::ERROR || state_ == State::END_OF_FILE)
     {
         return token_;
@@ -159,7 +165,16 @@ inline Token Lexer::get_next_token()
         return token_;
     }
 
-    if (!std::isspace(curr_char_) && curr_char_ != ',')
+    if (curr_char_ == ')')
+    {
+        // the char before ")" may not be whitespace, so try it here
+        state_ = State::IDENTIFIER;
+        handle_identifier_state();
+        return token_;
+    }
+
+    if (token_.get_token_value() != TokenValue::GROUP_START
+        && !std::isspace(curr_char_) && curr_char_ != ',')
     {
         state_ = State::ERROR;
         error_flag_ = true;
@@ -276,8 +291,31 @@ inline void Lexer::handle_identifier_state()
         }
     }
 
+    if (token_.get_token_value() == TokenValue::CAPTURE_AS)
+    {
+        // try to match '(' directly
+        if (curr_char_ != '(')
+        {
+            state_ = State::ERROR;
+            error_flag_ = true;
+            error_msg_ = "no required token \"(\" found";
+            token_ = Token();
+            return;
+        }
+        buffer_.push_back(curr_char_);
+        token_ = Token(buffer_,
+            dictionary_.get_token_type(buffer_),
+            dictionary_.get_token_value(buffer_));
+        buffer_.clear();
+        move_to_next_char();
+        state_ = State::NONE;
+        return;
+    }
+
     bool found = false;
-    while (buffer_.length() < dictionary_.get_key_max_length() && (std::isalpha(curr_char_) || curr_char_ == ' ') && !found)
+    while (buffer_.length() < dictionary_.get_key_max_length() 
+           && (std::isalpha(curr_char_) || curr_char_ == ' ' || curr_char_ == ')')
+           && !found)
     {
         buffer_.push_back(std::tolower(curr_char_));
         move_to_next_char();
@@ -311,7 +349,7 @@ inline void Lexer::handle_identifier_state()
         state_ = State::NONE;
         token_ = Token(buffer_,
                        dictionary_.get_token_type(buffer_),
-                       dictionary_.get_token_value(buffer_));
+            dictionary_.get_token_value(buffer_));
     }
     else
     {

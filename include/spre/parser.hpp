@@ -19,7 +19,7 @@ namespace spre
 class Parser
 {
   public:
-    explicit Parser(Lexer &lexer);
+    explicit Parser(Lexer &lexer, bool show_error = true);
     ~Parser();
     bool has_error() const;
     void report_error() const;
@@ -29,7 +29,9 @@ class Parser
     Lexer &lexer_;
     bool error_flag_;
     string error_msg_;
+    const bool show_error_;
 
+    unique_ptr<ExprAST> parse_token(const Token &token);
     unique_ptr<CharacterExprAST> parse_character(const TokenValue &token_value);
     unique_ptr<QuantifierExprAST> parse_quantifier(const TokenValue &token_value);
     unique_ptr<GroupExprAST> parse_group(const TokenValue &token_value);
@@ -38,7 +40,7 @@ class Parser
     unique_ptr<AnchorExprAST> parse_anchor(const TokenValue &token_value);
 };
 
-Parser::Parser(Lexer &lexer) : lexer_(lexer), error_flag_(false)
+Parser::Parser(Lexer &lexer, bool show_error) : lexer_(lexer), error_flag_(false), show_error_(show_error)
 {
     lexer_.get_next_token(); // so now we have the first token
 }
@@ -58,6 +60,7 @@ inline void Parser::report_error() const
     {
         return;
     }
+    fprintf(stderr, "parser error: ");
     fprintf(stderr, "%s", error_msg_.c_str());
     fprintf(stderr, "\n");
 }
@@ -71,40 +74,57 @@ inline vector<unique_ptr<ExprAST>> Parser::parse()
     {
         Token token = lexer_.get_token();
         //std::cout << token.get_value() << "\n";
-
-        switch (token.get_token_type())
+        if (token.get_token_type() == TokenType::END_OF_FILE)
         {
-        case TokenType::CHARACTER:
-            asts.push_back(std::move(parse_character(token.get_token_value())));
-            break;
-        case TokenType::QUANTIFIER:
-            asts.push_back(std::move(parse_quantifier(token.get_token_value())));
-            break;
-        case TokenType::GROUP:
-            asts.push_back(std::move(parse_group(token.get_token_value())));
-            break;
-        case TokenType::LOOKAROUND:
-            asts.push_back(std::move(parse_lookaround(token.get_token_value())));
-            break;
-        case TokenType::FLAG:
-            asts.push_back(std::move(parse_flag(token.get_token_value())));
-            break;
-        case TokenType::ANCHOR:
-            asts.push_back(std::move(parse_anchor(token.get_token_value())));
-            break;
-        case TokenType::END_OF_FILE:
-            // we are good
             eof = true;
-            break;
-        case TokenType::UNDEFINED:
-            error_flag_ = true;
-            error_msg_ = "so invalid ast met, some errors happened";
-            break;
-        default:
-            break;
         }
+        asts.push_back(std::move(parse_token(token)));
     }
     return std::move(asts);
+}
+
+
+inline unique_ptr<ExprAST> Parser::parse_token(const Token &token)
+{
+    unique_ptr<ExprAST> ptr;
+    switch (token.get_token_type())
+    {
+    case TokenType::CHARACTER:
+        ptr = std::move(parse_character(token.get_token_value()));
+        break;
+    case TokenType::QUANTIFIER:
+        ptr = std::move(parse_quantifier(token.get_token_value()));
+        break;
+    case TokenType::GROUP:
+        ptr = std::move(parse_group(token.get_token_value()));
+        break;
+    case TokenType::LOOKAROUND:
+        ptr = std::move(parse_lookaround(token.get_token_value()));
+        break;
+    case TokenType::FLAG:
+        ptr = std::move(parse_flag(token.get_token_value()));
+        break;
+    case TokenType::ANCHOR:
+        ptr = std::move(parse_anchor(token.get_token_value()));
+        break;
+    case TokenType::END_OF_FILE:
+        // we are good
+        //eof = true;
+        break;
+    case TokenType::UNDEFINED:
+        error_flag_ = true;
+        error_msg_ = "so invalid ast met, some errors happened";
+        break;
+    default:
+        break;
+    }
+
+    if (show_error_)
+    {
+        report_error();
+    }
+
+    return std::move(ptr);
 }
 
 inline unique_ptr<CharacterExprAST> Parser::parse_character(const TokenValue &token_value)
@@ -362,44 +382,58 @@ inline unique_ptr<GroupExprAST> Parser::parse_group(const TokenValue &token_valu
     case TokenValue::CAPTURE_AS:
     {
         Token group_start = lexer_.get_next_token();
-        vector<unique_ptr<ExprAST>> cond = parse();
-        // after parsing the sub_query_ptr_vec, current token should be ")"!!!
-        Token group_end = lexer_.get_token();
-        if (group_start.get_token_value() == TokenValue::GROUP_START && group_end.get_token_value() == TokenValue::GROUP_END)
+        if (group_start.get_token_value() != TokenValue::GROUP_START)
         {
-            ptr = make_unique<GroupExprAST>(std::move(cond));
-            // we have a smallest possible ptr now.
-
-            Token next_token = lexer_.get_next_token();
-            if (next_token.get_token_value() == TokenValue::AS)
-            {
-                Token name = lexer_.get_next_token();
-                if (name.get_token_value() == TokenValue::STRING)
-                {
-                    // prefect name!
-                    ptr->set_name(name.get_value());
-                    next_token = lexer_.get_next_token();
-                }
-                else
-                {
-                    ptr = nullptr;
-                    error_flag_ = true;
-                    error_msg_ = "the name in \"capture (cond) as \"name\"\" is invalid";
-                }
-            }
-
-            // right now the current token
-            // is the one after the whole
-            // capture (cond) [as "name"]
+            // early return
+            ptr = nullptr;
+            error_flag_ = true;
+            error_msg_ = "capture should come with \"(...)\"";
+            return std::move(ptr);
         }
-        else
+        lexer_.get_next_token(); // after parsing "(", now the token become the inside part
+        vector<unique_ptr<ExprAST>> cond;
+        do 
+        {
+            cond.push_back(std::move(parse_token(lexer_.get_token())));
+            // after parsing, lexer_.get_token() become the one following.
+        } while (lexer_.get_token().get_token_value() != TokenValue::GROUP_END
+            && lexer_.get_token().get_token_type() != TokenType::END_OF_FILE
+            && lexer_.get_token().get_token_type() != TokenType::UNDEFINED);
+        // after parsing the sub_query_ptr_vec, current token should be ")"!!!
+        std::cout << "now tokn []"<< lexer_.get_token().get_value() << "[]\n";
+        if (lexer_.get_token().get_token_value() != TokenValue::GROUP_END)
         {
             ptr = nullptr;
             error_flag_ = true;
-            error_msg_ = "the condition in \"capture (cond)\" is invalid";
+            error_msg_ = "capture condition doesn't end correctly";
+            return std::move(ptr);
+        }
+        ptr = make_unique<GroupExprAST>(std::move(cond));
+
+        Token guess_as = lexer_.get_next_token();
+        if (guess_as.get_token_value() == TokenValue::AS)
+        {
+            Token name = lexer_.get_next_token();
+            if (name.get_token_value() == TokenValue::STRING)
+            {
+                // prefect name!
+                ptr->set_name(name.get_value());
+                lexer_.get_next_token();
+            }
+            else
+            {
+                ptr = nullptr;
+                error_flag_ = true;
+                error_msg_ = "the name in \"capture (cond) as \"name\"\" is invalid";
+            }
         }
 
-		break;
+        // right now the current token
+        // is the one after the whole
+        // capture (cond) [as "name"]
+
+        return ptr;
+        //break;
     }
  
     case TokenValue::UNTIL:
